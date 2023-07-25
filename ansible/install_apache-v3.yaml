@@ -1,0 +1,9 @@
+- hosts: all
+  become: true
+  tasks:
+  - name: update repository index and install apache package
+    package:
+      name: 
+        - "{{ apache_package }}"
+      state: latest
+      update_cache: yes

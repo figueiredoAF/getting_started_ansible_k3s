@@ -1,0 +1,114 @@
+---
+- hosts: all
+  become: true
+  pre_tasks:
+    - name: install updates
+      tags: [never, update]
+      apt:
+        update_cache: yes
+        # upgrade: dist
+        # state: fixed
+      when: ansible_distribution in ["Debian"]
+
+- hosts: k3s_control_nodes
+  become: true
+  tasks:
+    - name: Control nodes status
+      tags: control, status
+      ping:
+
+    - name: Download k3s
+      tags: control, k3s_install
+      uri:
+        url: https://get.k3s.io
+        return_content: yes
+      register: k3s_installer
+
+    - name: Update cmdline.txt
+      tags: control, k3s_install
+      shell: grep -qF 'cgroup_memory=1 cgroup_enable=memory' /boot/cmdline.txt || echo "$(cat /boot/cmdline.txt) cgroup_memory=1 cgroup_enable=memory" > /boot/cmdline.txt
+
+    - name: Run k3s installer
+      tags: control, k3s_install
+      shell:
+        cmd: INSTALL_K3S_VERSION=v1.27.3+k3s1 sh -s -
+        stdin: "{{ k3s_installer.content }}"
+
+    - name: Enable services
+      tags: control, k3s_install
+      service:
+        name: systemd-resolved
+        state: started
+        enabled: true
+
+    - name: Reboot machine after k3s install
+      tags: control, k3s_install
+      reboot:
+        reboot_timeout: 3600
+
+    - name: Replace host IP address
+      tags: control, k3s_install, k3s_config
+      replace:
+        path: /etc/rancher/k3s/k3s.yaml
+        regexp: '127.0.0.1'
+        replace: "{{ ansible_default_ipv4.address }}"
+
+    - name: Copy kubeconfig file
+      tags: control, k3s_install, k3s_config
+      fetch:
+        flat: true
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ../.k3s/k3s.yaml
+
+    - name: Copy node token
+      tags: control, k3s_install, k3s_config
+      fetch:
+        flat: true
+        src: /var/lib/rancher/k3s/server/node-token
+        dest: ../.k3s/k3s_node_token.yaml
+
+- hosts: k3s_worker_nodes
+  become: true
+  vars:
+    k3s_node_token: "{{ lookup('file', '../.k3s/k3s_node_token.yaml') }}"
+  tasks:
+    - name: Worker nodes status
+      tags: worker, status
+      ping:
+
+    - name: Print K3S Worker node install command
+      tags: worker, k3s_install, k3s_config
+      debug:
+        msg: "curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.27.3+k3s1 K3S_URL={{ k3s_server }} K3S_TOKEN={{ k3s_node_token }} sh -s -"
+
+    - name: Download k3s
+      tags: worker, k3s_install
+      uri:
+        url: https://get.k3s.io
+        return_content: yes
+      register: k3s_installer
+
+    # NOT required foor Beaglebone
+    #- name: Update cmdline.txt
+    #  tags: worker, k3s_install
+    #  shell: grep -qF 'cgroup_memory=1 cgroup_enable=memory' /boot/cmdline.txt || echo "$(cat /boot/cmdline.txt) cgroup_memory=1 cgroup_enable=memory" > /boot/cmdline.txt
+
+    - name: Run k3s worker installer
+      tags: worker, k3s_install
+      shell:
+        cmd: INSTALL_K3S_VERSION=v1.27.3+k3s1 K3S_URL={{ k3s_server }} K3S_TOKEN={{ k3s_node_token }} sh -s - 
+        stdin: "{{ k3s_installer.content }}"
+
+    - name: Enable services
+      tags: worker, k3s_install
+      service:
+        name: systemd-resolved
+        state: started
+        enabled: true
+
+    - name: Reboot machine after k3s install
+      tags: worker, k3s_install
+      reboot:
+        reboot_timeout: 3600
+
+      

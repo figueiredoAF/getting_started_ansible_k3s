@@ -1,0 +1,8 @@
+- hosts: all
+  become: true
+  tasks:
+  - name: remove apache package
+    package:
+      name: 
+        - "{{ apache_package }}"
+      state: absent

@@ -1,0 +1,22 @@
+---
+- hosts: k3s_control_nodes
+  become: true
+  tasks:
+    - name: Remove k3s
+      tags: control, k3s_uninstall
+      shell: /usr/local/bin/k3s-uninstall.sh
+
+- hosts: k3s_worker_nodes
+  become: true
+  tasks:
+    - name: Remove k3s
+      tags: worker, k3s_uninstall
+      shell: /usr/local/bin/k3s-agent-uninstall.sh
+
+- hosts: 127.0.0.1
+  tasks:
+    - name: Delete k3s config files
+      tags: local
+      file:
+        path: ../.k3s
+        state: absent

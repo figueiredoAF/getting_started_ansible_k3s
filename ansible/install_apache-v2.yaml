@@ -1,0 +1,18 @@
+- hosts: all
+  become: true
+  tasks:
+  - name: update repository index and install apache2 package for Debian based distributions
+    apt:
+      name: 
+        - apache2
+      state: latest
+      update_cache: yes
+    when: ansible_distribution == "Debian"
+
+  - name: update repository index and install apache2 package for CentOS based distributions
+    dnf:
+      name: 
+        - httpd
+      state: latest
+      update_cache: yes
+    when: ansible_distribution == "CentOS"
